@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server"; // ✅ Fixed typo (@cleark -> @clerk) and changed to auth for App Router
 import prisma from "@/lib/prisma";
-import authSeller from "@/lib/authSeller"; // ✅ Added import
+import authSeller from "@/middlewares/authSeller"; // ✅ Added import
 
 // Auth Seller
 export async function GET(request) {

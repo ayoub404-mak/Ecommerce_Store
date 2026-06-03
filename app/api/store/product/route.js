@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server"; // ✅ Changed for App Router
 import prisma from "@/lib/prisma";
 import imagekit from "@/configs/imageKit";
-import authSeller from "@/lib/authSeller"; // ✅ ADDED: Make sure this path matches where you saved authSeller
+import authSeller from "@/middlewares/authSeller"; // ✅ ADDED: Make sure this path matches where you saved authSeller
 
 // Add new product
 export async function POST(request) {
