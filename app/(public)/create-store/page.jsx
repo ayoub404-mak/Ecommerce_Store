@@ -4,8 +4,15 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 import toast from "react-hot-toast"
 import Loading from "@/components/Loading"
+import { useUser, useAuth } from "@clerk/nextjs" 
+import { useRouter } from "next/navigation"
+import axios from "axios" 
 
 export default function CreateStore() {
+
+    const { user } = useUser()
+    const router = useRouter()
+    const { getToken } = useAuth()
 
     const [alreadySubmitted, setAlreadySubmitted] = useState(false)
     const [status, setStatus] = useState("")
@@ -19,7 +26,7 @@ export default function CreateStore() {
         email: "",
         contact: "",
         address: "",
-        image: ""
+        image: null // ✅ FIX: Changed from "" to null to prevent URL.createObjectURL crash
     })
 
     const onChangeHandler = (e) => {
@@ -27,28 +34,94 @@ export default function CreateStore() {
     }
 
     const fetchSellerStatus = async () => {
-        // Logic to check if the store is already submitted
-
-
-        setLoading(false)
+        const token = await getToken()
+        try {
+            const { data } = await axios.get('/api/store/create', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            if (['approved', 'rejected', 'pending'].includes(data.status)) {
+                setStatus(data.status)
+                setAlreadySubmitted(true)
+                
+                switch (data.status) {
+                    case "approved":
+                        // ✅ FIX: Typo "dashbord" -> "dashboard"
+                        setMessage("Your store has been approved, you can now add products to your store from dashboard")
+                        // ✅ FIX: Typo router.pish -> router.push
+                        setTimeout(() => router.push("/store"), 5000) 
+                        break;
+                    case "rejected":
+                        // ✅ FIX: Typo "moore" -> "more"
+                        setMessage("Your store request has been rejected, contact the admin for more details")
+                        break;
+                    case "pending":
+                        // ✅ FIX: Typo "pleas" -> "please"
+                        setMessage("Your store request is pending, please wait for admin to approve your store")
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                setAlreadySubmitted(false)
+            }
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        } finally {
+            // ✅ Moved to finally block to ensure loading always stops
+            setLoading(false)
+        }
     }
 
     const onSubmitHandler = async (e) => {
         e.preventDefault()
-        // Logic to submit the store details
+        if (!user) {
+            // ✅ FIX: toast -> toast.error
+            return toast.error('Please login to continue')
+        }
+        try {
+            const token = await getToken()
+            const formData = new FormData()
+            formData.append("name", storeInfo.name)
+            formData.append("description", storeInfo.description)
+            formData.append("username", storeInfo.username)
+            formData.append("email", storeInfo.email)
+            formData.append("contact", storeInfo.contact)
+            formData.append("address", storeInfo.address)
+            formData.append("image", storeInfo.image)
 
-
+            const { data } = await axios.post('/api/store/create', formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            toast.success(data.message)
+            await fetchSellerStatus()
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        }
     }
 
     useEffect(() => {
-        fetchSellerStatus()
-    }, [])
+        if (user) {
+            fetchSellerStatus()
+        } else {
+            setLoading(false)
+        }
+    }, [user])
+
+    if (!user) {
+        return (
+            <div className="min-h-[80vh] mx-6 flex items-center justify-center text-slate-400">
+                <h1 className="text-2xl sm:text-4xl font-semibold">Please <span className="text-slate-500">Login</span> to continue</h1>
+            </div>
+        )
+    }
 
     return !loading ? (
         <>
             {!alreadySubmitted ? (
                 <div className="mx-6 min-h-[70vh] my-16">
-                    <form onSubmit={e => toast.promise(onSubmitHandler(e), { loading: "Submitting data..." })} className="max-w-7xl mx-auto flex flex-col items-start gap-3 text-slate-500">
+                    {/* ✅ FIX: Removed toast.promise to prevent double popups */}
+                    <form onSubmit={onSubmitHandler} className="max-w-7xl mx-auto flex flex-col items-start gap-3 text-slate-500">
                         {/* Title */}
                         <div>
                             <h1 className="text-3xl ">Add Your <span className="text-slate-800 font-medium">Store</span></h1>
@@ -79,7 +152,8 @@ export default function CreateStore() {
                         <p>Address</p>
                         <textarea name="address" onChange={onChangeHandler} value={storeInfo.address} rows={5} placeholder="Enter your store address" className="border border-slate-300 outline-slate-400 w-full max-w-lg p-2 rounded resize-none" />
 
-                        <button className="bg-slate-800 text-white px-12 py-2 rounded mt-10 mb-40 active:scale-95 hover:bg-slate-900 transition ">Submit</button>
+                        {/* ✅ FIX: Added type="submit" */}
+                        <button type="submit" className="bg-slate-800 text-white px-12 py-2 rounded mt-10 mb-40 active:scale-95 hover:bg-slate-900 transition ">Submit</button>
                     </form>
                 </div>
             ) : (

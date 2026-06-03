@@ -5,20 +5,43 @@ import Link from "next/link"
 import { ArrowRightIcon } from "lucide-react"
 import AdminNavbar from "./AdminNavbar"
 import AdminSidebar from "./AdminSidebar"
+import { useUser, useAuth } from "@clerk/nextjs"
+import axios from "axios"
 
 const AdminLayout = ({ children }) => {
+
+    // ✅ FIX: Added isLoaded to ensure Clerk has finished checking the user's session
+    const { user, isLoaded } = useUser()
+    const { getToken } = useAuth()
 
     const [isAdmin, setIsAdmin] = useState(false)
     const [loading, setLoading] = useState(true)
 
     const fetchIsAdmin = async () => {
-        setIsAdmin(true)
-        setLoading(false)
+        try {
+            const token = await getToken()
+            const { data } = await axios.get('/api/admin/is-admin', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setIsAdmin(data.isAdmin)
+        } catch (error) {
+            console.log(error)
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => {
-        fetchIsAdmin()
-    }, [])
+        // ✅ FIX: Wait for Clerk to finish loading before checking the user
+        if (isLoaded) {
+            if (user) {
+                fetchIsAdmin()
+            } else {
+                // ✅ FIX: If user is not logged in, stop loading so it shows the "not authorized" message
+                setLoading(false)
+            }
+        }
+    }, [isLoaded, user])
 
     return loading ? (
         <Loading />
