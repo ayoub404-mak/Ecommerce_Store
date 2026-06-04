@@ -6,6 +6,7 @@ export async function POST(req) {
     const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
 
     if (!webhookSecret) {
+        console.error('❌ CLERK_WEBHOOK_SECRET is missing!');
         return new Response('Webhook secret not configured', { status: 500 });
     }
 
@@ -30,37 +31,51 @@ export async function POST(req) {
             'svix-signature': svix_signature,
         });
     } catch (err) {
-        console.error('Error verifying webhook:', err);
+        console.error('❌ Error verifying webhook:', err);
         return new Response('Error occurred', { status: 400 });
     }
 
     const eventType = evt.type;
     const { data } = evt;
 
-    // ✅ GRANT "plus" status when subscription is active/created/updated
+    // ✅ FIX: Extract the user ID from the correct location in the Clerk Billing payload
+    const userId = data.payer?.user_id;
+
+    if (!userId) {
+        console.error('❌ Could not find user ID in webhook payload');
+        return new Response('Missing user ID', { status: 400 });
+    }
+
+    // ✅ GRANT "plus" status
     if (
         eventType === 'subscription.active' || 
         eventType === 'subscription.created' || 
         eventType === 'subscription.updated'
     ) {
         if (data.status === 'active' || data.status === 'trialing') {
-            await clerkClient.users.updateUserMetadata(data.userId, {
+            console.log(`⬆️ Upgrading user ${userId} to PLUS plan...`);
+            await clerkClient.users.updateUserMetadata(userId, {
                 publicMetadata: {
-                    plan: 'plus', // This triggers your green badge!
+                    plan: 'plus',
                 },
             });
-            console.log(`✅ User ${data.userId} upgraded to PLUS plan`);
+            console.log('✅ User upgraded successfully!');
         }
     }
 
-    // ✅ REVOKE "plus" status when subscription is past due (payment failed)
-    if (eventType === 'subscription.pastDue') {
-        await clerkClient.users.updateUserMetadata(data.userId, {
+    // ✅ REVOKE "plus" status
+    if (
+        eventType === 'subscription.pastDue' || 
+        eventType === 'subscription.canceled' || 
+        eventType === 'subscription.deleted'
+    ) {
+        console.log(`⬇️ Downgrading user ${userId} to FREE plan...`);
+        await clerkClient.users.updateUserMetadata(userId, {
             publicMetadata: {
-                plan: 'free', // Reverts them back to standard
+                plan: 'free',
             },
         });
-        console.log(`⚠️ User ${data.userId} subscription past due - downgraded to FREE`);
+        console.log('✅ User downgraded successfully!');
     }
 
     return new Response('Webhook received successfully', { status: 200 });
