@@ -1,7 +1,10 @@
 'use client'
 import { useEffect, useState } from "react"
 import Loading from "@/components/Loading"
-import { orderDummyData } from "@/assets/assets"
+// ✅ REMOVED: Unused import (orderDummyData)
+import { useAuth } from "@clerk/nextjs"
+import toast from "react-hot-toast"
+import axios from "axios" // ✅ ADDED: Missing axios import
 
 export default function StoreOrders() {
     const [orders, setOrders] = useState([])
@@ -9,16 +12,39 @@ export default function StoreOrders() {
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
 
+    const { getToken } = useAuth()
 
     const fetchOrders = async () => {
-       setOrders(orderDummyData)
-       setLoading(false)
+        try {
+            const token = await getToken()
+            const { data } = await axios.get('/api/store/orders', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setOrders(data.orders)
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        } finally {
+            setLoading(false)
+        }
     }
 
     const updateOrderStatus = async (orderId, status) => {
-        // Logic to update the status of an order
-
-
+        try {
+            const token = await getToken()
+            await axios.post('/api/store/orders', { orderId, status }, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            // Great job updating the state locally for a fast UI!
+            setOrders(prev => 
+                prev.map(order => order.id === orderId ? { ...order, status } : order)
+            )
+            
+            // ✅ FIX: Typo "satatus" -> "status"
+            toast.success('Order status updated!')
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        }
     }
 
     const openModal = (order) => {
@@ -41,7 +67,7 @@ export default function StoreOrders() {
         <>
             <h1 className="text-2xl text-slate-500 mb-5">Store <span className="text-slate-800 font-medium">Orders</span></h1>
             {orders.length === 0 ? (
-                <p>No orders found</p>
+                <p className="text-slate-500">No orders found</p>
             ) : (
                 <div className="overflow-x-auto max-w-4xl rounded-md shadow border border-gray-200">
                     <table className="w-full text-sm text-left text-gray-600">
@@ -98,8 +124,9 @@ export default function StoreOrders() {
 
             {/* Modal */}
             {isModalOpen && selectedOrder && (
-                <div onClick={closeModal} className="fixed inset-0 flex items-center justify-center bg-black/50 text-slate-700 text-sm backdrop-blur-xs z-50" >
-                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative">
+                // Note: If you get a Tailwind warning for 'backdrop-blur-xs', change it to 'backdrop-blur-sm'
+                <div onClick={closeModal} className="fixed inset-0 flex items-center justify-center bg-black/50 text-slate-700 text-sm backdrop-blur-sm z-50" >
+                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
                         <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
                             Order Details
                         </h2>
@@ -139,7 +166,7 @@ export default function StoreOrders() {
                             <p><span className="text-green-700">Payment Method:</span> {selectedOrder.paymentMethod}</p>
                             <p><span className="text-green-700">Paid:</span> {selectedOrder.isPaid ? "Yes" : "No"}</p>
                             {selectedOrder.isCouponUsed && (
-                                <p><span className="text-green-700">Coupon:</span> {selectedOrder.coupon.code} ({selectedOrder.coupon.discount}% off)</p>
+                                <p><span className="text-green-700">Coupon:</span> {selectedOrder.coupon?.code} ({selectedOrder.coupon?.discount}% off)</p>
                             )}
                             <p><span className="text-green-700">Status:</span> {selectedOrder.status}</p>
                             <p><span className="text-green-700">Order Date:</span> {new Date(selectedOrder.createdAt).toLocaleString()}</p>

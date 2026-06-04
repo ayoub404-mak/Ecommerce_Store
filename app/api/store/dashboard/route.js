@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server"; // ✅ Changed for App Router
 import authSeller from "@/middlewares/authSeller";
+import prisma from '@/lib/prisma'
+
 // Get dashboard data for seller (total orders, total earnings, total products)
 export async function GET(request) {
     try {

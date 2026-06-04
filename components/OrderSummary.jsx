@@ -1,38 +1,40 @@
-import { PlusIcon, SquarePenIcon, XIcon } from 'lucide-react';
-import React, { useState } from 'react'
-import AddressModal from './AddressModal';
-import { useSelector } from 'react-redux';
-import toast from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
+'use client' // ✅ ADDED: Required for hooks like useState and useRouter
+import { PlusIcon, SquarePenIcon, XIcon } from 'lucide-react'
+import { useState } from 'react'
+import AddressModal from './AddressModal'
+import { useSelector } from 'react-redux'
+import toast from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
+// ✅ FIX: Removed 'Show', added 'useUser'
+import { useUser } from '@clerk/nextjs' 
 
 const OrderSummary = ({ totalPrice, items }) => {
+    const { user } = useUser() // ✅ ADDED: To check the user's plan
+    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$'
+    const router = useRouter()
+    const addressList = useSelector(state => state.address.list)
 
-    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$';
-
-    const router = useRouter();
-
-    const addressList = useSelector(state => state.address.list);
-
-    const [paymentMethod, setPaymentMethod] = useState('COD');
-    const [selectedAddress, setSelectedAddress] = useState(null);
-    const [showAddressModal, setShowAddressModal] = useState(false);
-    const [couponCodeInput, setCouponCodeInput] = useState('');
-    const [coupon, setCoupon] = useState('');
+    const [paymentMethod, setPaymentMethod] = useState('COD')
+    const [selectedAddress, setSelectedAddress] = useState(null)
+    const [showAddressModal, setShowAddressModal] = useState(false)
+    const [couponCodeInput, setCouponCodeInput] = useState('')
+    const [coupon, setCoupon] = useState('')
 
     const handleCouponCode = async (event) => {
-        event.preventDefault();
-        
+        event.preventDefault()
+        // Logic to check coupon will go here
     }
 
     const handlePlaceOrder = async (e) => {
-        e.preventDefault();
-
+        e.preventDefault()
+        // Logic to place order will go here
         router.push('/orders')
     }
 
     return (
         <div className='w-full max-w-lg lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-7'>
             <h2 className='text-xl font-medium text-slate-600'>Payment Summary</h2>
+            
             <p className='text-slate-400 text-xs my-4'>Payment Method</p>
             <div className='flex gap-2 items-center'>
                 <input type="radio" id="COD" onChange={() => setPaymentMethod('COD')} checked={paymentMethod === 'COD'} className='accent-gray-500' />
@@ -42,6 +44,7 @@ const OrderSummary = ({ totalPrice, items }) => {
                 <input type="radio" id="STRIPE" name='payment' onChange={() => setPaymentMethod('STRIPE')} checked={paymentMethod === 'STRIPE'} className='accent-gray-500' />
                 <label htmlFor="STRIPE" className='cursor-pointer'>Stripe Payment</label>
             </div>
+
             <div className='my-4 py-4 border-y border-slate-200 text-slate-400'>
                 <p>Address</p>
                 {
@@ -69,6 +72,7 @@ const OrderSummary = ({ totalPrice, items }) => {
                     )
                 }
             </div>
+
             <div className='pb-4 border-b border-slate-200'>
                 <div className='flex justify-between'>
                     <div className='flex flex-col gap-1 text-slate-400'>
@@ -78,13 +82,24 @@ const OrderSummary = ({ totalPrice, items }) => {
                     </div>
                     <div className='flex flex-col gap-1 font-medium text-right'>
                         <p>{currency}{totalPrice.toLocaleString()}</p>
-                        <p>Free</p>
+                        
+                        {/* ✅ FIX: Replaced <Show> with standard React for Shipping */}
+                        <p>
+                            {user?.publicMetadata?.plan === 'plus' ? (
+                                'Free'
+                            ) : (
+                                `${currency}5`
+                            )}
+                        </p>
+
                         {coupon && <p>{`-${currency}${(coupon.discount / 100 * totalPrice).toFixed(2)}`}</p>}
                     </div>
                 </div>
+
                 {
                     !coupon ? (
-                        <form onSubmit={e => toast.promise(handleCouponCode(e), { loading: 'Checking Coupon...' })} className='flex justify-center gap-3 mt-3'>
+                        // ✅ FIX: Removed toast.promise to prevent double popups later
+                        <form onSubmit={handleCouponCode} className='flex justify-center gap-3 mt-3'>
                             <input onChange={(e) => setCouponCodeInput(e.target.value)} value={couponCodeInput} type="text" placeholder='Coupon Code' className='border border-slate-400 p-1.5 rounded w-full outline-none' />
                             <button className='bg-slate-600 text-white px-3 rounded hover:bg-slate-800 active:scale-95 transition-all'>Apply</button>
                         </form>
@@ -97,14 +112,28 @@ const OrderSummary = ({ totalPrice, items }) => {
                     )
                 }
             </div>
+
             <div className='flex justify-between py-4'>
                 <p>Total:</p>
-                <p className='font-medium text-right'>{currency}{coupon ? (totalPrice - (coupon.discount / 100 * totalPrice)).toFixed(2) : totalPrice.toLocaleString()}</p>
+                <p className='font-medium text-right'>
+                    {/* ✅ FIX: Replaced <Show> with standard React for Total Price.
+                        This also fixes the bug where Plus users would see a blank total! */}
+                    {user?.publicMetadata?.plan === 'plus' ? (
+                        // Plus Plan: Free shipping (No + 5)
+                        `${currency}${coupon ? (totalPrice - (coupon.discount / 100 * totalPrice)).toFixed(2) : totalPrice.toLocaleString()}`
+                    ) : (
+                        // Standard Plan: $5 shipping
+                        `${currency}${coupon ? (totalPrice + 5 - (coupon.discount / 100 * totalPrice)).toFixed(2) : (totalPrice + 5).toLocaleString()}`
+                    )}
+                </p>
             </div>
-            <button onClick={e => toast.promise(handlePlaceOrder(e), { loading: 'placing Order...' })} className='w-full bg-slate-700 text-white py-2.5 rounded hover:bg-slate-900 active:scale-95 transition-all'>Place Order</button>
+
+            {/* ✅ FIX: Removed toast.promise to prevent double popups later */}
+            <button onClick={handlePlaceOrder} className='w-full bg-slate-700 text-white py-2.5 rounded hover:bg-slate-900 active:scale-95 transition-all'>
+                Place Order
+            </button>
 
             {showAddressModal && <AddressModal setShowAddressModal={setShowAddressModal} />}
-
         </div>
     )
 }

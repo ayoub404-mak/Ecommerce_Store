@@ -5,19 +5,36 @@ import Link from "next/link"
 import { ArrowRightIcon } from "lucide-react"
 import SellerNavbar from "./StoreNavbar"
 import SellerSidebar from "./StoreSidebar"
-import { dummyStoreData } from "@/assets/assets"
+// ✅ REMOVED: Unused import (dummyStoreData)
+import { useAuth } from "@clerk/nextjs"
+import axios from "axios"
 
 const StoreLayout = ({ children }) => {
 
+    const { getToken } = useAuth()
 
     const [isSeller, setIsSeller] = useState(false)
     const [loading, setLoading] = useState(true)
     const [storeInfo, setStoreInfo] = useState(null)
 
     const fetchIsSeller = async () => {
-        setIsSeller(true)
-        setStoreInfo(dummyStoreData)
-        setLoading(false)
+        try {
+            const token = await getToken()
+            
+            // ✅ FIX: Added 'await' before axios.get
+            const { data } = await axios.get('/api/store/is-seller', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            setIsSeller(data.isSeller)
+            setStoreInfo(data.storeInfo)
+        } catch (error) {
+            console.log("Failed to fetch seller status:", error)
+            // Ensure it defaults to false on error so it shows the unauthorized screen
+            setIsSeller(false) 
+        } finally {
+            setLoading(false)
+        }
     }
 
     useEffect(() => {
