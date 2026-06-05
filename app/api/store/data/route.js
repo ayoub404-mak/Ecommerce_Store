@@ -24,9 +24,9 @@ export async function GET(request) {
             // ⚠️ IMPORTANT: Verify these names match your schema.prisma exactly!
             // Usually, Prisma relations are lowercase plural (products) and singular (ratings).
             include: { 
-                products: { 
+                Product: { 
                     include: { 
-                        ratings: true 
+                        rating: true 
                     } 
                 } 
             }

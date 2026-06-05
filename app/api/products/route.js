@@ -1,44 +1,40 @@
+// app/api/products/route.js
+
 import prisma from "@/lib/prisma";
 import { NextResponse } from "next/server";
 
-
-
-//get the products data
 export async function GET(request) {
     try {
+        const { searchParams } = new URL(request.url);
+        const storeId = searchParams.get("storeId");
+
         const products = await prisma.product.findMany({
             where: { 
                 inStock: true,
-                // ✅ FIX: Filter by active store directly in the database query.
-                // This completely removes the need for the JavaScript .filter() below!
-                store: { 
-                    isActive: true 
-                }
+                store: { isActive: true },
+                ...(storeId && { storeId }) // Optional: filter by store if provided
             },
             include: {
-                // ⚠️ Note: Check your schema.prisma. If the relation is plural, ensure this is 'ratings'
+                // ✅ CRITICAL: Make sure this is here!
                 rating: { 
                     select: {
-                        createdAt: true, 
                         rating: true,
                         review: true,
+                        createdAt: true,
                         user: { select: { name: true, image: true } }
                     }
                 },
                 store: true,
             },
-            // ✅ FIX: Moved orderBy out of the include block and to the root level
             orderBy: { 
                 createdAt: 'desc' 
             }
         });
 
-        // ✅ REMOVED: The JavaScript .filter() is no longer needed because Prisma handles it!
-        // products = products.filter(product => product.store.isActive)
         return NextResponse.json({ products });
 
     } catch (error) {
-        console.error("Get all products error:", error);
-        return NextResponse.json({ error: "An internal server error occurred" }, { status: 500 });
+        console.error("Get products error:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

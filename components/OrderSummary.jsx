@@ -1,15 +1,19 @@
-'use client' // ✅ ADDED: Required for hooks like useState and useRouter
+'use client'
 import { PlusIcon, SquarePenIcon, XIcon } from 'lucide-react'
 import { useState } from 'react'
 import AddressModal from './AddressModal'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
-// ✅ FIX: Removed 'Show', added 'useUser'
-import { useUser } from '@clerk/nextjs' 
+import { useAuth, useUser } from '@clerk/nextjs' 
+import axios from 'axios'
+import { fetchCart } from '@/lib/features/cart/cartSlice'
 
 const OrderSummary = ({ totalPrice, items }) => {
-    const { user } = useUser() // ✅ ADDED: To check the user's plan
+    const { user, isLoaded } = useUser() 
+    const { getToken } = useAuth()
+    const dispatch = useDispatch()
+
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$'
     const router = useRouter()
     const addressList = useSelector(state => state.address.list)
@@ -20,15 +24,72 @@ const OrderSummary = ({ totalPrice, items }) => {
     const [couponCodeInput, setCouponCodeInput] = useState('')
     const [coupon, setCoupon] = useState('')
 
+    const isPlusUser = isLoaded && user?.publicMetadata?.plan === 'plus'
+    const SHIPPING_FEE = 5 
+    const shippingCost = isPlusUser ? 0 : SHIPPING_FEE
+    const discountAmount = coupon ? (coupon.discount / 100 * totalPrice) : 0
+    const finalTotal = totalPrice + shippingCost - discountAmount
+
     const handleCouponCode = async (event) => {
         event.preventDefault()
-        // Logic to check coupon will go here
+        try {
+            if (!user) {
+                return toast.error('Please login to proceed')
+            }
+
+            const token = await getToken()
+            const { data } = await axios.post('/api/coupon', { code: couponCodeInput }, { 
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            setCoupon(data.coupon)
+            setCouponCodeInput('') 
+            toast.success("Coupon applied")
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        }
     }
 
     const handlePlaceOrder = async (e) => {
         e.preventDefault()
-        // Logic to place order will go here
-        router.push('/orders')
+        try {
+            if (!user) {
+                return toast.error('Please login to place an order')
+            }
+            if (!selectedAddress) {
+                // ✅ Typo fix: "addresse" -> "address"
+                return toast.error('Please select an address') 
+            }
+            
+            const token = await getToken()
+
+            const orderData = { 
+                addressId: selectedAddress.id,
+                items,
+                paymentMethod,
+            }
+            
+            if (coupon) {
+                orderData.couponCode = coupon.code
+            }
+            
+            // Create order
+            const { data } = await axios.post('/api/orders', orderData, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            
+            if (paymentMethod === 'STRIPE') {
+                // Redirect to Stripe Checkout
+                window.location.href = data.session.url;
+            } else {
+                // COD: Show success, redirect, and clear the cart
+                toast.success(data.message)
+                router.push('/orders')
+                dispatch(fetchCart({ getToken }))
+            }
+        } catch (error) {
+            toast.error(error?.response?.data?.error || error.message)
+        }
     }
 
     return (
@@ -57,7 +118,10 @@ const OrderSummary = ({ totalPrice, items }) => {
                         <div>
                             {
                                 addressList.length > 0 && (
-                                    <select className='border border-slate-400 p-2 w-full my-3 outline-none rounded' onChange={(e) => setSelectedAddress(addressList[e.target.value])} >
+                                    <select 
+                                        className='border border-slate-400 p-2 w-full my-3 outline-none rounded' 
+                                        onChange={(e) => setSelectedAddress(addressList[Number(e.target.value)])} 
+                                    >
                                         <option value="">Select Address</option>
                                         {
                                             addressList.map((address, index) => (
@@ -82,23 +146,13 @@ const OrderSummary = ({ totalPrice, items }) => {
                     </div>
                     <div className='flex flex-col gap-1 font-medium text-right'>
                         <p>{currency}{totalPrice.toLocaleString()}</p>
-                        
-                        {/* ✅ FIX: Replaced <Show> with standard React for Shipping */}
-                        <p>
-                            {user?.publicMetadata?.plan === 'plus' ? (
-                                'Free'
-                            ) : (
-                                `${currency}5`
-                            )}
-                        </p>
-
-                        {coupon && <p>{`-${currency}${(coupon.discount / 100 * totalPrice).toFixed(2)}`}</p>}
+                        <p>{isPlusUser ? 'Free' : `${currency}${SHIPPING_FEE}`}</p>
+                        {coupon && <p>{`-${currency}${discountAmount.toFixed(2)}`}</p>}
                     </div>
                 </div>
 
                 {
                     !coupon ? (
-                        // ✅ FIX: Removed toast.promise to prevent double popups later
                         <form onSubmit={handleCouponCode} className='flex justify-center gap-3 mt-3'>
                             <input onChange={(e) => setCouponCodeInput(e.target.value)} value={couponCodeInput} type="text" placeholder='Coupon Code' className='border border-slate-400 p-1.5 rounded w-full outline-none' />
                             <button className='bg-slate-600 text-white px-3 rounded hover:bg-slate-800 active:scale-95 transition-all'>Apply</button>
@@ -116,19 +170,10 @@ const OrderSummary = ({ totalPrice, items }) => {
             <div className='flex justify-between py-4'>
                 <p>Total:</p>
                 <p className='font-medium text-right'>
-                    {/* ✅ FIX: Replaced <Show> with standard React for Total Price.
-                        This also fixes the bug where Plus users would see a blank total! */}
-                    {user?.publicMetadata?.plan === 'plus' ? (
-                        // Plus Plan: Free shipping (No + 5)
-                        `${currency}${coupon ? (totalPrice - (coupon.discount / 100 * totalPrice)).toFixed(2) : totalPrice.toLocaleString()}`
-                    ) : (
-                        // Standard Plan: $5 shipping
-                        `${currency}${coupon ? (totalPrice + 5 - (coupon.discount / 100 * totalPrice)).toFixed(2) : (totalPrice + 5).toLocaleString()}`
-                    )}
+                    {currency}{finalTotal.toFixed(2)}
                 </p>
             </div>
 
-            {/* ✅ FIX: Removed toast.promise to prevent double popups later */}
             <button onClick={handlePlaceOrder} className='w-full bg-slate-700 text-white py-2.5 rounded hover:bg-slate-900 active:scale-95 transition-all'>
                 Place Order
             </button>
@@ -139,3 +184,4 @@ const OrderSummary = ({ totalPrice, items }) => {
 }
 
 export default OrderSummary
+// ✅ NO MORE STRAY BACKEND CODE HERE!
