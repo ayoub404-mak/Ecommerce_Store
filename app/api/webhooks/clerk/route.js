@@ -49,6 +49,10 @@ export async function POST(req) {
             return new Response('Missing user ID', { status: 400 });
         }
 
+        // ✅ FIX: In @clerk/nextjs v5, clerkClient is an async function!
+        // We must call it to get the actual client object.
+        const client = await clerkClient();
+
         if (
             eventType === 'subscription.active' || 
             eventType === 'subscription.created' || 
@@ -56,7 +60,9 @@ export async function POST(req) {
         ) {
             if (data.status === 'active' || data.status === 'trialing') {
                 console.log(`⬆️ Upgrading user ${userId} to PLUS plan...`);
-                await clerkClient.users.updateUserMetadata(userId, {
+                
+                // ✅ FIX: Use `client.users` instead of `clerkClient.users`
+                await client.users.updateUserMetadata(userId, {
                     publicMetadata: { plan: 'plus' },
                 });
                 console.log('✅ User upgraded successfully!');
@@ -69,7 +75,9 @@ export async function POST(req) {
             eventType === 'subscription.deleted'
         ) {
             console.log(`⬇️ Downgrading user ${userId} to FREE plan...`);
-            await clerkClient.users.updateUserMetadata(userId, {
+            
+            // ✅ FIX: Use `client.users` instead of `clerkClient.users`
+            await client.users.updateUserMetadata(userId, {
                 publicMetadata: { plan: 'free' },
             });
             console.log('✅ User downgraded successfully!');
@@ -77,7 +85,6 @@ export async function POST(req) {
 
         return new Response('Webhook received successfully', { status: 200 });
     } catch (error) {
-        // This will catch any import errors (like svix or clerkClient failing)
         console.error('💥 FATAL WEBHOOK ERROR:', error);
         return new Response('Internal Server Error', { status: 500 });
     }
